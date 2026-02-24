@@ -41,6 +41,7 @@ export interface ChatActions {
   // 세션 관리
   createSession: () => string;
   endSession: (sessionId: string) => void;
+  clearAllSessions: () => void;
   getCurrentSession: () => ChatSession | null;
 
   // 메시지 관리

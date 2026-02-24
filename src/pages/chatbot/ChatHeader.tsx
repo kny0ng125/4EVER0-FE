@@ -1,7 +1,8 @@
 import React from 'react';
 import { ToneSwitch } from './ToneSwitch';
-import { Sparkles, MessageCircle, Crown, Lock } from 'lucide-react';
+import { Sparkles, MessageCircle, Crown, Lock, RotateCcw } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { Button } from '@/components/Button';
 import { useAuthStore } from '@/stores/useAuthStore';
 import { ChatSession } from '@/types/chat';
 
@@ -9,6 +10,7 @@ interface ChatHeaderProps {
   ubtiInProgress: boolean;
   isMunerTone: boolean;
   onToneToggle: (isMuner: boolean) => void;
+  onResetChat: () => void;
   buttonDisabled: boolean;
   currentSession: ChatSession | null;
 }
@@ -17,6 +19,7 @@ export const ChatHeader: React.FC<ChatHeaderProps> = ({
   ubtiInProgress,
   isMunerTone,
   onToneToggle,
+  onResetChat,
   buttonDisabled,
   currentSession,
 }) => {
@@ -45,6 +48,19 @@ export const ChatHeader: React.FC<ChatHeaderProps> = ({
           <h1 className="text-sm sm:text-base font-bold text-brand-darkblue truncate">
             {ubtiInProgress ? '🐙 타코시그널' : '무너와 대화하기'}
           </h1>
+
+          {!ubtiInProgress && (
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={onResetChat}
+              disabled={buttonDisabled}
+              className="h-7 w-7 text-gray-400 hover:text-brand-darkblue hover:bg-gray-100 rounded-full transition-colors flex-shrink-0"
+              title="대화 초기화"
+            >
+              <RotateCcw className="w-3.5 h-3.5" />
+            </Button>
+          )}
 
           {ubtiInProgress && (
             <div className="hidden sm:flex items-center gap-2 text-xs bg-gradient-to-r from-purple-100 to-blue-100 text-purple-700 px-3 py-1 rounded-full border border-purple-200">

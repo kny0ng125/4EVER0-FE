@@ -191,6 +191,13 @@ export const useChatStore = create<ChatStore>()((set, get) => ({
     });
   },
 
+  clearAllSessions: () => {
+    set(() => ({
+      sessions: {},
+      currentSessionId: null,
+    }));
+  },
+
   getCurrentSession: () => {
     const state = get();
     const id = state.currentSessionId;

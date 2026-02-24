@@ -44,7 +44,6 @@ export const ChatContainer: React.FC = () => {
   const currentSessionId = useChatStore((state) => state.currentSessionId);
   const createSession = useChatStore.getState().createSession;
   const addMessage = useChatStore.getState().addMessage;
-  const endSession = useChatStore.getState().endSession;
 
   // 튜토리얼 초기화 로직
   useEffect(() => {
@@ -299,24 +298,14 @@ export const ChatContainer: React.FC = () => {
 
   // 채팅 초기화
   const resetChat = useCallback(() => {
-    if (currentSessionId) {
-      endSession(currentSessionId);
-    }
+    useChatStore.getState().clearAllSessions();
     resetUBTI();
     resetCards();
     resetStreamingState();
     isInitializedRef.current = false; // 초기화 플래그 리셋
     const newSessionId = createSession();
     addMessage(newSessionId, '새로운 대화를 시작합니다! 😊 무엇을 도와드릴까요?', 'bot');
-  }, [
-    currentSessionId,
-    endSession,
-    resetUBTI,
-    resetCards,
-    resetStreamingState,
-    createSession,
-    addMessage,
-  ]);
+  }, [resetUBTI, resetCards, resetStreamingState, createSession, addMessage]);
 
   // 버튼 상태
   const buttonDisabled = useMemo(
@@ -388,6 +377,7 @@ export const ChatContainer: React.FC = () => {
         ubtiInProgress={ubtiInProgress}
         isMunerTone={isMunerTone}
         onToneToggle={handleToneToggle}
+        onResetChat={resetChat}
         buttonDisabled={buttonDisabled}
         currentSession={currentSession}
       />
