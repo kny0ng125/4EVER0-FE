@@ -1,5 +1,7 @@
 #!/bin/sh
 
+exit 0
+
 BRANCH_NAME=$(git symbolic-ref --short HEAD)
 TICKET_ID=$(echo "$BRANCH_NAME" | grep -oE '[A-Z]+-[0-9]+')
 

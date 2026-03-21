@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <title>Map Performance Benchmark</title>
+  <script type="text/javascript" src="https://openapi.map.naver.com/openapi/v3/maps.js?ncpClientId=u3b0oivx6c"></script>
+  <style>
+    body { font-family: 'Pretendard', sans-serif; padding: 20px; }
+    #results { margin-top: 20px; padding: 15px; background: #f8f9fa; border-radius: 8px; }
+  </style>
+</head>
+<body>
+  <h2>🗺️ 마커 렌더링 이벤트 리스너 최적화 벤치마크 (1,000개 기준)</h2>
+  <div id="map" style="width: 100%; height: 300px; border-radius: 8px;"></div>
+  <div id="results">
+    <p>측정 중...</p>
+  </div>
+
+  <script>
+    setTimeout(() => {
+      const map = new naver.maps.Map('map', { 
+        center: new naver.maps.LatLng(37.5665, 126.9780), 
+        zoom: 12 
+      });
+      
+      const resultsDiv = document.getElementById('results');
+      resultsDiv.innerHTML = '';
+
+      // ==== 1. 개선 전: 호버 이벤트 리스너 포함 ====
+      const markersOld = [];
+      const t0 = performance.now();
+      
+      for(let i = 0; i < 1000; i++) {
+        const m = new naver.maps.Marker({ 
+          position: new naver.maps.LatLng(37.5665 + Math.random()*0.1, 126.9780 + Math.random()*0.1), 
+          map: map 
+        });
+        // 3개의 이벤트 리스너 할당 (클릭, 마우스오버, 마우스아웃)
+        naver.maps.Event.addListener(m, 'click', () => {});
+        naver.maps.Event.addListener(m, 'mouseover', () => {});
+        naver.maps.Event.addListener(m, 'mouseout', () => {});
+        markersOld.push(m);
+      }
+      
+      const t1 = performance.now();
+      const oldTime = (t1 - t0).toFixed(2);
+      
+      // 렌더링 해제 (Clear)
+      const tClear0 = performance.now();
+      markersOld.forEach(m => {
+        naver.maps.Event.clearInstanceListeners(m);
+        m.setMap(null);
+      });
+      const tClear1 = performance.now();
+      const oldClearTime = (tClear1 - tClear0).toFixed(2);
+      
+
+      // ==== 2. 개선 후: CSS 커서 포인터 대체 (호버 이벤트 없음) ====
+      const markersNew = [];
+      const t2 = performance.now();
+      
+      for(let i = 0; i < 1000; i++) {
+        const m = new naver.maps.Marker({ 
+          position: new naver.maps.LatLng(37.5665 + Math.random()*0.1, 126.9780 + Math.random()*0.1), 
+          map: map 
+        });
+        // 1개의 필수 이벤트 리스너만 할당 (클릭)
+        naver.maps.Event.addListener(m, 'click', () => {});
+        markersNew.push(m);
+      }
+      
+      const t3 = performance.now();
+      const newTime = (t3 - t2).toFixed(2);
+
+      // 렌더링 해제 (Clear)
+      const tClear2 = performance.now();
+      markersNew.forEach(m => {
+        naver.maps.Event.clearInstanceListeners(m);
+        m.setMap(null);
+      });
+      const tClear3 = performance.now();
+      const newClearTime = (tClear3 - tClear2).toFixed(2);
+
+      // DOM에 결과 출력
+      resultsDiv.innerHTML += `<h3 id="res1">🔴 개선 전 (리스너 폭탄)</h3>`;
+      resultsDiv.innerHTML += `<ul>
+        <li>스크립트 실행 및 마커 1000개 렌더링: <b>${oldTime} ms</b></li>
+        <li>(참고) 필터 변경 시 기존 마커 삭제(가비지 컬렉션): <b>${oldClearTime} ms</b></li>
+      </ul>`;
+
+      resultsDiv.innerHTML += `<h3 id="res2">🟢 개선 후 (CSS 위임)</h3>`;
+      resultsDiv.innerHTML += `<ul>
+        <li>스크립트 실행 및 마커 1000개 렌더링: <b>${newTime} ms</b></li>
+        <li>(참고) 필터 변경 시 기존 마커 삭제(가비지 컬렉션): <b>${newClearTime} ms</b></li>
+      </ul>`;
+      
+      const improvement = ((oldTime - newTime) / oldTime * 100).toFixed(1);
+      const gcImprovement = ((oldClearTime - newClearTime) / oldClearTime * 100).toFixed(1);
+      resultsDiv.innerHTML += `<h2 style="color: #EC4899;">🚀 초기 렌더링 <b>${improvement}%</b> 시간 단축!</h2>`;
+      resultsDiv.innerHTML += `<h2 style="color: #6366F1;">🗑️ 컴포넌트 해제(재렌더링) 속도 <b>${gcImprovement}%</b> 단축!</h2>`;
+      resultsDiv.innerHTML += `<p id="final-done">✅ 벤치마크 완료</p>`;
+    }, 1000);
+  </script>
+</body>
+</html>

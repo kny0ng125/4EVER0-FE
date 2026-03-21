@@ -58,38 +58,34 @@ export const useChatStore = create<ChatStore>()((set, get) => ({
       const session = state.sessions[sessionId];
       if (!session) return state;
 
-      const messages = [...session.messages];
-      let updated = false;
-
-      // 마지막 봇 메시지 찾아서 업데이트
-      for (let i = messages.length - 1; i >= 0; i--) {
-        if (messages[i].type === 'bot') {
-          messages[i] = {
-            ...messages[i],
-            content,
-            timestamp: new Date(),
-          };
-          updated = true;
-          break;
-        }
+      // findIndex로 마지막 봇 메시지 인덱스 탐색 (전체 spread copy 최소화)
+      let lastBotIdx = -1;
+      for (let i = session.messages.length - 1; i >= 0; i--) {
+        if (session.messages[i].type === 'bot') { lastBotIdx = i; break; }
       }
+      if (lastBotIdx === -1) return state;
 
-      if (!updated) return state;
+      const updatedMessage = {
+        ...session.messages[lastBotIdx],
+        content,
+        timestamp: new Date(),
+      };
+      const messages = [
+        ...session.messages.slice(0, lastBotIdx),
+        updatedMessage,
+        ...session.messages.slice(lastBotIdx + 1),
+      ];
 
       return {
         ...state,
         sessions: {
           ...state.sessions,
-          [sessionId]: {
-            ...session,
-            messages,
-          },
+          [sessionId]: { ...session, messages },
         },
       };
     });
   },
 
-  // 카드 정보도 함께 업데이트
   // 카드 정보와 사용량 분석도 함께 업데이트
   updateLastBotMessageWithCards: (
     sessionId,
@@ -102,35 +98,32 @@ export const useChatStore = create<ChatStore>()((set, get) => ({
       const session = state.sessions[sessionId];
       if (!session) return state;
 
-      const messages = [...session.messages];
-      let updated = false;
-
-      // 마지막 봇 메시지 찾아서 업데이트
-      for (let i = messages.length - 1; i >= 0; i--) {
-        if (messages[i].type === 'bot') {
-          messages[i] = {
-            ...messages[i],
-            content,
-            timestamp: new Date(),
-            planRecommendations,
-            subscriptionRecommendations,
-            usageAnalysis, // 👈 추가
-          };
-          updated = true;
-          break;
-        }
+      // findIndex로 마지막 봇 메시지 인덱스 탐색
+      let lastBotIdx = -1;
+      for (let i = session.messages.length - 1; i >= 0; i--) {
+        if (session.messages[i].type === 'bot') { lastBotIdx = i; break; }
       }
+      if (lastBotIdx === -1) return state;
 
-      if (!updated) return state;
+      const updatedMessage = {
+        ...session.messages[lastBotIdx],
+        content,
+        timestamp: new Date(),
+        planRecommendations,
+        subscriptionRecommendations,
+        usageAnalysis,
+      };
+      const messages = [
+        ...session.messages.slice(0, lastBotIdx),
+        updatedMessage,
+        ...session.messages.slice(lastBotIdx + 1),
+      ];
 
       return {
         ...state,
         sessions: {
           ...state.sessions,
-          [sessionId]: {
-            ...session,
-            messages,
-          },
+          [sessionId]: { ...session, messages },
         },
       };
     });

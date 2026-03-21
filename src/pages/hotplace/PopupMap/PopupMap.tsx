@@ -59,7 +59,8 @@ export default function PopupMap({
   const [loadingLocation, setLoadingLocation] = useState(false);
 
   // 팝오버 상태 (마커와 완전 분리)
-  const [selectedPopup, setSelectedPopup] = useState<PopupData | null>(null);
+  const [selectedPopups, setSelectedPopups] = useState<PopupData[]>([]);
+  const [selectedIndex, setSelectedIndex] = useState(0);
   const [popoverOpen, setPopoverOpen] = useState(false);
 
   const { mapRef, isLoaded, isApiReady, mapInstance, addMarker, setCenter, setZoom } = useNaverMap({
@@ -73,16 +74,23 @@ export default function PopupMap({
   const mapEventListenersRef = useRef<naver.maps.MapEventListener[]>([]);
   const markersInitializedRef = useRef(false); // 마커 초기화 상태
 
-  // 팝오버 제어 함수
+  // 단일 팝오버 제어 함수
   const openPopover = useCallback((popup: PopupData) => {
-    console.log(`🎯 팝오버 열기: ${popup.name}`);
-    setSelectedPopup(popup);
+    setSelectedPopups([popup]);
+    setSelectedIndex(0);
+    setPopoverOpen(true);
+  }, []);
+
+  // 다중 팝오버 제어 함수
+  const openClusterPopover = useCallback((popups: PopupData[]) => {
+    setSelectedPopups(popups);
+    setSelectedIndex(0);
     setPopoverOpen(true);
   }, []);
 
   const closePopover = useCallback(() => {
-    console.log('🔒 팝오버 닫기');
-    setSelectedPopup(null);
+    setSelectedPopups([]);
+    setSelectedIndex(0);
     setPopoverOpen(false);
   }, []);
 
@@ -158,6 +166,40 @@ export default function PopupMap({
     setCenter(36.2253017, 127.6460516);
     setZoom(7);
   }, [setCenter, setZoom, closePopover]);
+
+  // 지도 idle 이벤트 + 300ms 디바운싱: 지도 이동 후 전체 팝업 재조회
+  const debouncedFetchRef = useRef<NodeJS.Timeout | null>(null);
+
+  const fetchPopupsAtMapCenter = useCallback(async () => {
+    // 근처 보기 모드일 때는 사용자가 직접 위치를 설정하므로 idle 재조회 건너뜀
+    if (!mapInstance || !isLoaded || !isApiReady || isShowingNearby) return;
+
+    if (debouncedFetchRef.current) clearTimeout(debouncedFetchRef.current);
+
+    debouncedFetchRef.current = setTimeout(async () => {
+      try {
+        const response = await getPopups();
+        if (response.status === 200 && response.data) {
+          setAllPopups(response);
+        }
+      } catch {
+        // idle 재조회 실패는 조용히 무시 (초기 로딩 에러가 아님)
+      }
+    }, 300);
+  }, [mapInstance, isLoaded, isApiReady, isShowingNearby]);
+
+  // idle 이벤트 리스너 등록 (지도 이동/줌 완료 시 디바운스 재조회)
+  useEffect(() => {
+    if (!isLoaded || !isApiReady || !mapInstance) return;
+
+    const idleListener = naver.maps.Event.addListener(mapInstance, 'idle', fetchPopupsAtMapCenter);
+
+    return () => {
+      naver.maps.Event.removeListener(idleListener);
+      if (debouncedFetchRef.current) clearTimeout(debouncedFetchRef.current);
+    };
+  }, [isLoaded, isApiReady, mapInstance, fetchPopupsAtMapCenter]);
+
 
   // 마커 정리 함수
   const safeCleanupMarkers = useCallback(() => {
@@ -295,6 +337,7 @@ export default function PopupMap({
                   width: 32px; height: 32px;
                   display: flex; align-items: center; justify-content: center;
                   border-radius: 50%;
+                  cursor: pointer;
                 ">
                     ${MappinSvg}
                   </div>
@@ -307,35 +350,21 @@ export default function PopupMap({
             return;
           }
 
+          // 마커에 원본 데이터 저장
+          (marker as any)._popupData = popup;
           markersRef.current.push(marker);
           successCount++;
 
           // 마커 클릭 이벤트
           const clickListener = naver.maps.Event.addListener(marker, 'click', (e) => {
             try {
-              if (e.domEvent) {
-                e.domEvent.stopPropagation();
-              }
-              console.log(`🎯 마커 클릭: ${popup.name}`);
+              if (e.domEvent) e.domEvent.stopPropagation();
               openPopover(popup);
             } catch (error) {
               console.error('마커 클릭 이벤트 처리 중 오류:', error);
             }
           });
           mapEventListenersRef.current.push(clickListener);
-
-          // 호버 효과
-          const mouseoverListener = naver.maps.Event.addListener(marker, 'mouseover', () => {
-            if (mapRef.current) {
-              mapRef.current.style.cursor = 'pointer';
-            }
-          });
-          const mouseoutListener = naver.maps.Event.addListener(marker, 'mouseout', () => {
-            if (mapRef.current) {
-              mapRef.current.style.cursor = '';
-            }
-          });
-          mapEventListenersRef.current.push(mouseoverListener, mouseoutListener);
         } catch (e) {
           console.error(`❌ 마커 ${index + 1} 생성 중 오류:`, e);
         }
@@ -343,10 +372,21 @@ export default function PopupMap({
 
       console.log(`✅ ${successCount}/${popupsToShow.length}개 마커 생성 완료`);
 
-      // 클러스터링 적용 (전체 보기일 때만)
-      if (!isShowingNearby && markersRef.current.length > 0 && mapInstance) {
+      // 클러스터링 적용
+      if (markersRef.current.length > 0 && mapInstance) {
         try {
-          markerClusterRef.current = createMarkerClustering(mapInstance, markersRef.current);
+          markerClusterRef.current = createMarkerClustering(
+            mapInstance,
+            markersRef.current,
+            (clickedMembers) => {
+              const popupsInCluster = clickedMembers
+                .map((m: any) => m._popupData as PopupData)
+                .filter(Boolean);
+              if (popupsInCluster.length > 0) {
+                openClusterPopover(popupsInCluster);
+              }
+            }
+          );
           console.log('✅ 클러스터링 적용 완료');
         } catch (e) {
           console.error('❌ 클러스터링 적용 실패:', e);
@@ -364,7 +404,6 @@ export default function PopupMap({
         setTimeout(() => {
           const targetPopup = popupsToShow.find((p) => p.id === initialOpenPopupId);
           if (targetPopup) {
-            console.log(`🎯 초기 팝업 열기: ${targetPopup.name}`);
             openPopover(targetPopup);
           }
         }, 1000);
@@ -378,12 +417,10 @@ export default function PopupMap({
     }
 
     return () => {
-      // Cleanup
       safeCleanupMarkers();
       markersInitializedRef.current = false;
     };
   }, [
-    // 핵심 의존성만 포함 (팝오버 상태 제외)
     isLoaded,
     isApiReady,
     mapInstance,
@@ -393,6 +430,7 @@ export default function PopupMap({
     isShowingNearby,
     addMarker,
     openPopover,
+    openClusterPopover,
     closePopover,
     initialOpenPopupId,
     mapRef,
@@ -462,7 +500,7 @@ export default function PopupMap({
       />
 
       {/* 브라우저 중앙 고정 팝오버 */}
-      {selectedPopup && (
+      {selectedPopups.length > 0 && (
         <div
           style={{
             position: 'fixed',
@@ -473,24 +511,16 @@ export default function PopupMap({
           }}
         >
           <MapPopover
-            popup={selectedPopup}
-            index={
-              isShowingNearby ? displayData.findIndex((p) => p.id === selectedPopup.id) : undefined
-            }
+            popups={selectedPopups}
+            currentIndex={selectedIndex}
+            onChangeIndex={setSelectedIndex}
             showIndex={isShowingNearby}
             open={popoverOpen}
             onOpenChange={(open) => {
-              if (!open) {
-                closePopover();
-              }
+              if (!open) closePopover();
             }}
           >
-            <div
-              style={{
-                width: '1px',
-                height: '1px',
-              }}
-            />
+            <div style={{ width: '1px', height: '1px' }} />
           </MapPopover>
         </div>
       )}

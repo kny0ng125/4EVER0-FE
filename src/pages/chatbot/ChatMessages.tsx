@@ -40,7 +40,8 @@ export const ChatMessages: React.FC<ChatMessagesProps> = React.memo(
         case 'likes_loading':
           return <LikesLoadingIndicator />;
         case 'receiving_text':
-          return null;
+          // 지연 스트리밍 방식에서 버퍼링 중에도 로딩 인디케이터 유지
+          return <TypingIndicator />;
         default:
           return null;
       }

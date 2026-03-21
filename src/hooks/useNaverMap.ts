@@ -1,19 +1,55 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 import type { NaverMapOptions, MarkerOptions } from '@/types/naverMap';
 
+const NAVER_MAPS_CLIENT_ID = import.meta.env.VITE_NCP_CLIENT_ID as string;
+const NAVER_MAPS_SCRIPT_URL = `https://oapi.map.naver.com/openapi/v3/maps.js?ncpKeyId=${NAVER_MAPS_CLIENT_ID}&submodules=panorama,geocoder,drawing,visualization`;
+
+/** Naver Maps 스크립트를 비동기로 로드합니다. 이미 로드된 경우 즉시 resolve합니다. */
+function loadNaverMapsScript(): Promise<void> {
+  return new Promise((resolve, reject) => {
+    // 이미 완전히 로드된 경우
+    if (
+      typeof window !== 'undefined' &&
+      window.naver?.maps?.Map &&
+      window.naver?.maps?.Marker
+    ) {
+      resolve();
+      return;
+    }
+
+    // 이미 스크립트 태그가 삽입된 경우 (로딩 중)
+    const existing = document.querySelector('[data-naver-maps]');
+    if (existing) {
+      existing.addEventListener('load', () => resolve());
+      existing.addEventListener('error', () =>
+        reject(new Error('Naver Maps 스크립트 로드 실패'))
+      );
+      return;
+    }
+
+    // 새 스크립트 태그 삽입
+    const script = document.createElement('script');
+    script.src = NAVER_MAPS_SCRIPT_URL;
+    script.async = true;
+    script.dataset.naverMaps = 'true';
+    script.onload = () => resolve();
+    script.onerror = () => reject(new Error('Naver Maps 스크립트 로드 실패'));
+    document.head.appendChild(script);
+  });
+}
+
 export function useNaverMap(options: NaverMapOptions = {}) {
   const mapRef = useRef<HTMLDivElement>(null);
   const mapInstanceRef = useRef<naver.maps.Map | undefined>(undefined);
   const markersRef = useRef<naver.maps.Marker[]>([]);
   const [isLoaded, setIsLoaded] = useState(false);
   const [isApiReady, setIsApiReady] = useState(false);
-  const initializationAttemptedRef = useRef(false); // 초기화 시도 여부
-  const retryCountRef = useRef(0); // 재시도 횟수
+  const initializationAttemptedRef = useRef(false);
+  const retryCountRef = useRef(0);
 
   const {
     center = { lat: 37.5665, lng: 126.978 },
     zoom = 14,
-    mapTypeId = naver.maps.MapTypeId.NORMAL,
     minZoom = 6,
     maxZoom = 20,
     zoomControl = false,
@@ -22,50 +58,27 @@ export function useNaverMap(options: NaverMapOptions = {}) {
     logoControl = false,
   } = options;
 
+  // naver.maps.MapTypeId는 API 로드 후에만 접근 가능하므로 별도 처리
+  const mapTypeId = options.mapTypeId;
+
   // 네이버 맵 API 완전 로드 확인용
   const isNaverMapsFullyLoaded = useCallback((): boolean => {
     try {
-      const hasWindow = typeof window !== 'undefined';
-      const hasNaver = hasWindow && !!window.naver;
-      const hasMaps = hasNaver && !!window.naver.maps;
-      const hasMap = hasMaps && !!window.naver.maps.Map;
-      const hasMarker = hasMaps && !!window.naver.maps.Marker;
-      const hasLatLng = hasMaps && !!window.naver.maps.LatLng;
-      const hasEvent = hasMaps && !!window.naver.maps.Event;
-
-      const isFullyLoaded =
-        hasWindow && hasNaver && hasMaps && hasMap && hasMarker && hasLatLng && hasEvent;
-
-      if (!isFullyLoaded) {
-        console.log('네이버 맵 API 로드 상태:', {
-          hasWindow,
-          hasNaver,
-          hasMaps,
-          hasMap,
-          hasMarker,
-          hasLatLng,
-          hasEvent,
-        });
-      }
-
-      return isFullyLoaded;
-    } catch (error) {
-      console.error('❌ 네이버 맵 API 상태 확인 중 오류:', error);
+      return !!(
+        typeof window !== 'undefined' &&
+        window.naver?.maps?.Map &&
+        window.naver?.maps?.Marker &&
+        window.naver?.maps?.LatLng &&
+        window.naver?.maps?.Event
+      );
+    } catch {
       return false;
     }
   }, []);
 
   const addMarker = useCallback(
     (markerOptions: MarkerOptions) => {
-      if (!mapInstanceRef.current) {
-        console.warn('지도 인스턴스가 없어서 마커를 추가할 수 없습니다');
-        return null;
-      }
-
-      if (!isNaverMapsFullyLoaded()) {
-        console.warn('네이버 맵 API가 완전히 로드되지 않아서 마커를 추가할 수 없습니다');
-        return null;
-      }
+      if (!mapInstanceRef.current || !isNaverMapsFullyLoaded()) return null;
 
       try {
         const marker = new naver.maps.Marker({
@@ -88,13 +101,11 @@ export function useNaverMap(options: NaverMapOptions = {}) {
 
   const clearMarkers = useCallback(() => {
     try {
-      markersRef.current.forEach((marker, index) => {
+      markersRef.current.forEach((marker) => {
         try {
-          if (marker && typeof marker.setMap === 'function') {
-            marker.setMap(null);
-          }
-        } catch (error) {
-          console.warn(`마커 ${index + 1} 제거 중 오류:`, error);
+          if (marker && typeof marker.setMap === 'function') marker.setMap(null);
+        } catch (e) {
+          // ignore
         }
       });
       markersRef.current = [];
@@ -105,16 +116,7 @@ export function useNaverMap(options: NaverMapOptions = {}) {
 
   const setCenter = useCallback(
     (lat: number, lng: number) => {
-      if (!mapInstanceRef.current) {
-        console.warn('지도 인스턴스가 없어서 중심을 설정할 수 없습니다');
-        return;
-      }
-
-      if (!isNaverMapsFullyLoaded()) {
-        console.warn('네이버 맵 API가 완전히 로드되지 않아서 중심을 설정할 수 없습니다');
-        return;
-      }
-
+      if (!mapInstanceRef.current || !isNaverMapsFullyLoaded()) return;
       try {
         mapInstanceRef.current.setCenter(new naver.maps.LatLng(lat, lng));
       } catch (error) {
@@ -126,16 +128,7 @@ export function useNaverMap(options: NaverMapOptions = {}) {
 
   const setZoom = useCallback(
     (zoomLevel: number) => {
-      if (!mapInstanceRef.current) {
-        console.warn('지도 인스턴스가 없어서 줌을 설정할 수 없습니다');
-        return;
-      }
-
-      if (!isNaverMapsFullyLoaded()) {
-        console.warn('네이버 맵 API가 완전히 로드되지 않아서 줌을 설정할 수 없습니다');
-        return;
-      }
-
+      if (!mapInstanceRef.current || !isNaverMapsFullyLoaded()) return;
       try {
         mapInstanceRef.current.setZoom(zoomLevel);
       } catch (error) {
@@ -145,47 +138,24 @@ export function useNaverMap(options: NaverMapOptions = {}) {
     [isNaverMapsFullyLoaded],
   );
 
-  const getMarkers = useCallback(() => {
-    return markersRef.current;
-  }, []);
+  const getMarkers = useCallback(() => markersRef.current, []);
 
   // 지도 초기화 함수
   const initializeMap = useCallback((): boolean => {
-    // 이미 초기화 시도했으면 스킵
-    if (initializationAttemptedRef.current && mapInstanceRef.current) {
-      return true;
-    }
-
-    // DOM 요소 확인
-    if (!mapRef.current) {
-      console.warn('지도 컨테이너 DOM 요소가 없습니다');
-      return false;
-    }
-
-    // API 로드 상태 확인
-    if (!isNaverMapsFullyLoaded()) {
-      console.warn('네이버 맵 API가 완전히 로드되지 않았습니다');
-      return false;
-    }
+    if (initializationAttemptedRef.current && mapInstanceRef.current) return true;
+    if (!mapRef.current || !isNaverMapsFullyLoaded()) return false;
 
     try {
-      console.log('🗺️ 네이버 지도 초기화 시작');
       initializationAttemptedRef.current = true;
 
-      // 기존 인스턴스 정리
       if (mapInstanceRef.current) {
-        try {
-          mapInstanceRef.current.destroy?.();
-        } catch (e) {
-          console.warn('기존 지도 인스턴스 정리 중 오류:', e);
-        }
+        try { mapInstanceRef.current.destroy?.(); } catch { /* ignore */ }
       }
 
-      // 새 지도 인스턴스 생성
       mapInstanceRef.current = new naver.maps.Map(mapRef.current, {
         center: new naver.maps.LatLng(center.lat, center.lng),
         zoom,
-        mapTypeId,
+        mapTypeId: mapTypeId ?? naver.maps.MapTypeId.NORMAL,
         minZoom,
         maxZoom,
         zoomControl,
@@ -194,17 +164,14 @@ export function useNaverMap(options: NaverMapOptions = {}) {
         logoControl,
       });
 
-      // 초기화 완료 확인
       if (mapInstanceRef.current) {
         setIsLoaded(true);
-        retryCountRef.current = 0; // 재시도 카운터 리셋
-
+        retryCountRef.current = 0;
         return true;
-      } else {
-        return false;
       }
-    } catch (error) {
-      initializationAttemptedRef.current = false; // 재시도 허용
+      return false;
+    } catch {
+      initializationAttemptedRef.current = false;
       return false;
     }
   }, [
@@ -224,102 +191,60 @@ export function useNaverMap(options: NaverMapOptions = {}) {
   // 재시도 로직이 포함된 초기화
   const attemptInitialization = useCallback(() => {
     const maxRetries = 10;
-
-    if (retryCountRef.current >= maxRetries) {
-      return;
-    }
+    if (retryCountRef.current >= maxRetries) return;
 
     if (initializeMap()) {
-      console.log('지도 초기화 성공');
+      console.log('✅ 지도 초기화 성공');
       return;
     }
 
-    // 재시도
     retryCountRef.current++;
-    console.log(`지도 초기화 재시도 ${retryCountRef.current}/${maxRetries}`);
-
-    setTimeout(() => {
-      attemptInitialization();
-    }, 500 * retryCountRef.current); // 점진적 지연
+    setTimeout(() => attemptInitialization(), 500 * retryCountRef.current);
   }, [initializeMap]);
 
-  // API 상태 모니터링
+  // 비동기 스크립트 로딩 + API 준비 + 지도 초기화 메인 effect
   useEffect(() => {
-    let pollInterval: NodeJS.Timeout | null = null;
+    let cancelled = false;
 
-    const checkApiStatus = () => {
-      const isReady = isNaverMapsFullyLoaded();
-
-      if (isReady !== isApiReady) {
-        setIsApiReady(isReady);
-
-        if (isReady) {
-          console.log('✅ 네이버 맵 API 준비 완료');
-          if (pollInterval) {
-            clearInterval(pollInterval);
-            pollInterval = null;
-          }
-          // API 준비되면 초기화 시도
-          setTimeout(attemptInitialization, 100);
+    const init = async () => {
+      try {
+        // 1. 스크립트가 아직 로드되지 않았으면 비동기로 로드
+        if (!isNaverMapsFullyLoaded()) {
+          await loadNaverMapsScript();
         }
+
+        if (cancelled) return;
+
+        // 2. API 준비 완료 상태 업데이트
+        setIsApiReady(true);
+
+        // 3. 지도 초기화 시도
+        setTimeout(attemptInitialization, 100);
+      } catch (err) {
+        console.error('❌ Naver Maps 로드 실패:', err);
       }
     };
 
-    // 즉시 확인
-    checkApiStatus();
-
-    // API가 준비되지 않았으면 폴링 시작
-    if (!isApiReady) {
-      pollInterval = setInterval(checkApiStatus, 200);
-    }
+    init();
 
     return () => {
-      if (pollInterval) {
-        clearInterval(pollInterval);
-      }
-    };
-  }, [isApiReady, isNaverMapsFullyLoaded, attemptInitialization]);
-
-  // 메인 초기화 effect
-  useEffect(() => {
-    console.log('🔄 useNaverMap 메인 useEffect 실행');
-
-    const handleMapLoad = () => {
-      console.log('📡 네이버 맵 로드 이벤트 감지');
-      setTimeout(attemptInitialization, 100);
-    };
-
-    // 이벤트 리스너 등록
-    window.addEventListener('naver-maps-loaded', handleMapLoad);
-
-    // 이미 API가 준비되었다면 즉시 초기화
-    if (isNaverMapsFullyLoaded()) {
-      setTimeout(attemptInitialization, 100);
-    }
-
-    return () => {
-      console.log('🧹 useNaverMap cleanup');
-      window.removeEventListener('naver-maps-loaded', handleMapLoad);
-
-      // 컴포넌트 언마운트 시 정리
+      cancelled = true;
       clearMarkers();
 
       if (mapInstanceRef.current) {
         try {
           mapInstanceRef.current.destroy?.();
           mapInstanceRef.current = undefined;
-        } catch (error) {
-          console.warn('지도 인스턴스 정리 중 오류:', error);
-        }
+        } catch { /* ignore */ }
       }
 
-      // 플래그 리셋
       initializationAttemptedRef.current = false;
       retryCountRef.current = 0;
       setIsLoaded(false);
       setIsApiReady(false);
     };
-  }, [isNaverMapsFullyLoaded, attemptInitialization, clearMarkers]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // 마운트 시 한 번만 실행
 
   return {
     mapRef,

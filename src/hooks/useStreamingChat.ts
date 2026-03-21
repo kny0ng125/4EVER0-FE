@@ -341,7 +341,6 @@ export const useStreamingChat = () => {
 
               case 'message_chunk': {
                 fullResponseRef.current += parsedResponse.content;
-                setStreamingState('receiving_text');
 
                 // UBTI 메시지 청크 질문 추출 시도
                 if (isUBTI) {
@@ -351,12 +350,14 @@ export const useStreamingChat = () => {
                   }
                 }
 
-                updateMessageWithAllData(fullResponseRef.current, undefined, undefined);
+                // 클라이언트 사이드 지연 스트리밍을 위해, 통신 중 UI 업데이트는 완벽히 제거 (메모리 버퍼링만 수행)
                 break;
               }
 
               case 'message_end': {
                 setStreamingState('completed');
+                
+                // 스트리밍이 정상적으로 끝나면 비로소 완성된 전체 응답 세트를 UI에 한 번만 반영
                 updateMessageWithAllData(fullResponseRef.current, undefined, undefined);
 
                 const hasCards =
@@ -420,17 +421,28 @@ export const useStreamingChat = () => {
                   setUbtiReadyToSubmit(true);
                 }
 
-                // JSON 파싱 시도 실패하면 일반 메시지로 처리
-                const isParsed = parseAndDisplayUBTIResponse(fullResponseRef.current);
-                if (!isParsed) {
-                  updateLastBotMessage(currentSessionId, fullResponseRef.current);
-                }
+                // JSON 파싱 시도 실패하면 일반 메시지로 버퍼링 (업데이트 하지 않음)
+                parseAndDisplayUBTIResponse(fullResponseRef.current);
               } else {
-                // 일반 텍스트도 카드 정보와 함께 업데이트
-                updateMessageWithAllData(fullResponseRef.current, undefined, undefined);
+                // 일반 텍스트도 완전히 종료될 때까지 메모리에만 버퍼링
               }
             }
           }
+        },
+
+        onComplete: () => {
+          // 중간 오류 없이 완전히 마무리되었을 때만 버퍼에 쌓인 텍스트와 카드 데이터를 UI에 적용
+          updateMessageWithAllData(fullResponseRef.current, undefined, undefined);
+          setStreamingState('completed');
+          
+          const hasCards =
+            cardDataRef.current.plans.length > 0 ||
+            cardDataRef.current.subscriptions !== null;
+            
+          setTimeout(() => {
+            setStreamingState('idle');
+            setExpectingCards(false);
+          }, hasCards ? 10000 : 1000);
         },
 
         onError: (error: Error) => {
@@ -438,25 +450,9 @@ export const useStreamingChat = () => {
           setStreamingState('idle');
           setExpectingCards(false);
 
-          // 서버 연결 오류 구체적 처리 + 새로 시작하기 버튼 트리거
-          let errorMessage = '요청 처리 중 오류가 발생했습니다.';
+          // 에러가 났을 때 요구사항에 맞춰 단순한 메시지만 띄우기
+          updateLastBotMessage(currentSessionId, '문제가 발생했습니다. 다시시도해주세요');
 
-          if (
-            error.message.includes('fetch') ||
-            error.message.includes('network') ||
-            error.message.includes('Failed to fetch')
-          ) {
-            errorMessage = '서버에 연결할 수 없습니다. 잠시 후 다시 시도하거나 새로 시작해주세요.';
-          } else if (error.message.includes('timeout')) {
-            errorMessage = '요청 시간이 초과되었습니다. 새로 시작해주세요.';
-          } else if (
-            error.message.includes('500') ||
-            error.message.includes('Internal Server Error')
-          ) {
-            errorMessage = '시스템 오류가 발생했습니다. 새로 시작해주세요.';
-          }
-
-          updateLastBotMessage(currentSessionId, errorMessage);
           setCurrentPlanRecommendations([]);
           setCurrentSubscriptionRecommendations(null);
 

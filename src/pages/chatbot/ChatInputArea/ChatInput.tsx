@@ -10,7 +10,7 @@ interface ChatInputProps {
   autoFocus?: boolean;
 }
 
-export const ChatInput: React.FC<ChatInputProps> = ({
+export const ChatInput: React.FC<ChatInputProps> = React.memo(({
   onSendMessage,
   disabled = false,
   placeholder = '무너에게 메시지를 입력하세요...',
@@ -66,4 +66,6 @@ export const ChatInput: React.FC<ChatInputProps> = ({
       </Button>
     </form>
   );
-};
+});
+
+ChatInput.displayName = 'ChatInput';

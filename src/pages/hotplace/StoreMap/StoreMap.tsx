@@ -36,19 +36,19 @@ export default function StoreMap({
   onChangeSelectedIds,
 }: StoreMapProps) {
   const [nearbyStores, setNearbyStores] = useState<StoreData[]>([]);
-  const [currentLocation, setCurrentLocation] = useState<{ lat: number; lng: number }>({
-    lat: 37.503325874722,
-    lng: 127.04403462366,
-  });
+  const [currentLocation, setCurrentLocation] = useState<{ lat: number; lng: number } | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [loadingLocation, setLoadingLocation] = useState(false);
 
-  const [selectedStore, setSelectedStore] = useState<StoreData | null>(null);
+  const [selectedStores, setSelectedStores] = useState<StoreData[]>([]);
+  const [selectedIndex, setSelectedIndex] = useState(0);
   const [popoverOpen, setPopoverOpen] = useState(false);
 
+  const DEFAULT_LOCATION = { lat: 37.503325874722, lng: 127.04403462366 };
+
   const { mapRef, isLoaded, isApiReady, mapInstance, addMarker, setCenter, setZoom } = useNaverMap({
-    center: { lat: 37.503325874722, lng: 127.04403462366 },
+    center: DEFAULT_LOCATION,
     zoom: 14,
   });
 
@@ -58,28 +58,35 @@ export default function StoreMap({
   const mapEventListenersRef = useRef<naver.maps.MapEventListener[]>([]);
   const markersInitializedRef = useRef(false);
 
+  // 단일 마커 클릭용
   const openPopover = useCallback((store: StoreData) => {
-    setSelectedStore(store);
+    setSelectedStores([store]);
+    setSelectedIndex(0);
+    setPopoverOpen(true);
+  }, []);
+
+  // 클러스터 클릭용 (여러 개)
+  const openClusterPopover = useCallback((stores: StoreData[]) => {
+    setSelectedStores(stores);
+    setSelectedIndex(0);
     setPopoverOpen(true);
   }, []);
 
   const closePopover = useCallback(() => {
-    setSelectedStore(null);
+    setSelectedStores([]);
+    setSelectedIndex(0);
     setPopoverOpen(false);
   }, []);
 
-  // 매장 데이터 호출
+  // 매장 데이터 호출 — currentLocation이 설정된 이후에만 실행
   useEffect(() => {
+    if (!currentLocation) return;
+
     const fetchStores = async () => {
       try {
         setLoading(true);
         setError(null);
         onLoadingChange?.(true);
-        if (!currentLocation) {
-          setError('현재 위치 정보가 없습니다.');
-          setLoading(false);
-          return;
-        }
 
         if (selectedIds.length === 0) {
           setNearbyStores([]);
@@ -117,54 +124,86 @@ export default function StoreMap({
     fetchStores();
   }, [currentLocation, selectedIds]);
 
+  // 지도 idle 이벤트 + 300ms 디바운싱: 지도 이동 후 현재 중심 기준으로 매장 재조회
+  const debouncedFetchRef = useRef<NodeJS.Timeout | null>(null);
+
+  const fetchStoresAtMapCenter = useCallback(() => {
+    if (!mapInstance || !isLoaded || !isApiReady) return;
+    if (selectedIds.length === 0) return;
+
+    if (debouncedFetchRef.current) clearTimeout(debouncedFetchRef.current);
+
+    debouncedFetchRef.current = setTimeout(async () => {
+      try {
+        const mapCenter = mapInstance.getCenter() as naver.maps.LatLng;
+        const lat = mapCenter.lat();
+        const lng = mapCenter.lng();
+
+        setLoading(true);
+        onLoadingChange?.(true);
+        const response = await getNearbyCoupons(lat, lng, selectedIds);
+        if (Array.isArray(response)) {
+          const stores: StoreData[] = response.map((place: PlaceInfo) => ({
+            id: place.id,
+            name: place.name,
+            address: place.address,
+            latitude: place.lat,
+            longitude: place.lng,
+            brandName: place.brandName,
+          }));
+          setNearbyStores(stores);
+          setError(null);
+        }
+      } catch {
+        // 개별 에러는 무시 (초기 로딩 에러가 아님)
+      } finally {
+        setLoading(false);
+        onLoadingChange?.(false);
+      }
+    }, 300);
+  }, [mapInstance, isLoaded, isApiReady, selectedIds, onLoadingChange]);
+
+  // idle 이벤트 리스너 등록 (지도 이동/줌 완료 시 디바운스 재조회)
+  useEffect(() => {
+    if (!isLoaded || !isApiReady || !mapInstance) return;
+
+    const idleListener = naver.maps.Event.addListener(mapInstance, 'idle', fetchStoresAtMapCenter);
+
+    return () => {
+      naver.maps.Event.removeListener(idleListener);
+      if (debouncedFetchRef.current) clearTimeout(debouncedFetchRef.current);
+    };
+  }, [isLoaded, isApiReady, mapInstance, fetchStoresAtMapCenter]);
+
   const getCurrentLocation = useCallback(() => {
     if (!navigator.geolocation) {
       alert('이 브라우저는 위치 서비스를 지원하지 않습니다.');
-      setError('이 브라우저는 위치 서비스를 지원하지 않습니다.');
+      setCurrentLocation(DEFAULT_LOCATION);
       return;
     }
     setLoadingLocation(true);
     navigator.geolocation.getCurrentPosition(
-      async (position) => {
+      (position) => {
         const { latitude, longitude } = position.coords;
-        setCurrentLocation({
-          lat: latitude,
-          lng: longitude,
-        });
-
-        try {
-          const response = await getNearbyCoupons(latitude, longitude, selectedIds);
-          if (Array.isArray(response)) {
-            const stores: StoreData[] = response.map((place: PlaceInfo) => ({
-              id: place.id,
-              name: place.name,
-              address: place.address,
-              latitude: place.lat,
-              longitude: place.lng,
-              brandName: place.brandName,
-            }));
-            setNearbyStores(stores);
-            setCenter(latitude, longitude);
-            setZoom(14);
-            console.log('근처 매장 조회');
-            console.log(latitude, longitude);
-          }
-        } catch (e) {
-          console.log('근처 매장 조회 실패', e);
-        } finally {
-          setError(null);
-          setLoadingLocation(false);
-        }
+        setCurrentLocation({ lat: latitude, lng: longitude });
+        setCenter(latitude, longitude);
+        setZoom(14);
+        setLoadingLocation(false);
       },
       (error) => {
         console.error('위치 조회 실패:', error);
-        alert('위치 권한이 없거나 위치를 가져올 수 없습니다.');
-        setError('위치 권한이 없거나 위치를 가져올 수 없습니다.');
+        // 위치 권한 실패 시 fallback 좌표 사용
+        setCurrentLocation((prev) => prev ?? DEFAULT_LOCATION);
         setLoadingLocation(false);
       },
       { enableHighAccuracy: true, timeout: 10000, maximumAge: 300000 },
     );
   }, [setCenter, setZoom]);
+
+  // 마운트 시 자동으로 사용자 위치 가져오기
+  useEffect(() => {
+    getCurrentLocation();
+  }, []);
 
   const safeCleanupMarkers = useCallback(() => {
     markersRef.current.forEach((marker, index) => {
@@ -215,6 +254,8 @@ export default function StoreMap({
       markersInitializedRef.current = false;
       return;
     }
+
+    if (!currentLocation) return;
 
     mapInstance.setCenter(new naver.maps.LatLng(currentLocation.lat, currentLocation.lng));
     mapInstance.setZoom(14);
@@ -287,6 +328,7 @@ export default function StoreMap({
                 width: 32px; height: 32px;
                 display: flex; align-items: center; justify-content: center;
                 border-radius: 50%;
+                cursor: pointer;
               ">
                 ${dynamicPinSvg}
               </div>
@@ -295,25 +337,33 @@ export default function StoreMap({
             size: new naver.maps.Size(32, 32),
           },
         });
-        if (marker) markersRef.current.push(marker);
+        if (marker) {
+          // 마커 객체에 원본 store 데이터를 심어둡니다 (클러스터에서 역추적용)
+          (marker as any)._storeData = store;
+          markersRef.current.push(marker);
+        }
 
         const clickListener = naver.maps.Event.addListener(marker, 'click', (e) => {
           e.domEvent?.stopPropagation();
           openPopover(store);
         });
         mapEventListenersRef.current.push(clickListener);
-
-        const mouseoverListener = naver.maps.Event.addListener(marker, 'mouseover', () => {
-          if (mapRef.current) mapRef.current.style.cursor = 'pointer';
-        });
-        const mouseoutListener = naver.maps.Event.addListener(marker, 'mouseout', () => {
-          if (mapRef.current) mapRef.current.style.cursor = '';
-        });
-        mapEventListenersRef.current.push(mouseoverListener, mouseoutListener);
       });
 
       if (markersRef.current.length > 0 && mapInstance) {
-        markerClusterRef.current = createMarkerClustering(mapInstance, markersRef.current);
+        markerClusterRef.current = createMarkerClustering(
+          mapInstance,
+          markersRef.current,
+          (clickedMembers) => {
+            // 클릭된 클러스터 내의 마커들에 심어둔 _storeData 추출
+            const storesInCluster = clickedMembers
+              .map((m: any) => m._storeData as StoreData)
+              .filter(Boolean);
+            if (storesInCluster.length > 0) {
+              openClusterPopover(storesInCluster);
+            }
+          }
+        );
       }
 
       const mapClickListener = naver.maps.Event.addListener(mapInstance, 'click', () => {
@@ -343,83 +393,81 @@ export default function StoreMap({
     safeCleanupMarkers,
   ]);
 
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center h-[400px]">
-        <LoadingMooner />
-      </div>
-    );
-  }
-
-  if (error) {
-    return (
-      <div
-        className={`flex items-center justify-center ${className}`}
-        style={{ width: '100%', height: '400px', ...style }}
-      >
-        <div className="text-center">
-          <div className="text-red-500 text-sm mb-2">{error}</div>
-          <button
-            onClick={() => window.location.reload()}
-            className="text-xs text-blue-500 hover:underline"
-          >
-            다시 시도
-          </button>
-        </div>
-      </div>
-    );
-  }
-
-  if (!isApiReady) {
-    return (
-      <div
-        className={`flex items-center justify-center ${className}`}
-        style={{ width: '100%', height: '400px', ...style }}
-      >
-        <div className="flex items-center gap-2 text-gray-500 text-sm">
-          <div className="w-4 h-4 border-2 border-gray-300 border-t-blue-500 rounded-full animate-spin"></div>
-          지도 API 연결 중...
-        </div>
-      </div>
-    );
-  }
-
   return (
     <div className={`relative ${className}`} style={{ width: '100%', height: '500px', ...style }}>
+      {/* 지도 컨테이너 — 항상 DOM에 유지 */}
       <div ref={mapRef} style={{ width: '100%', height: '100%' }} />
 
-      <MapControls
-        loadingLocation={loadingLocation}
-        onGetCurrentLocation={getCurrentLocation}
-        brandIds={allBrandIds}
-        selectedIds={selectedIds}
-        onChangeSelectedIds={onChangeSelectedIds ?? (() => {})}
-      />
-
-      <MapLegend popupCount={nearbyStores.length} hasCurrentLocation={!!currentLocation} />
-
-      {selectedStore && (
-        <div
-          style={{
-            position: 'fixed',
-            top: '50%',
-            left: '50%',
-            transform: 'translate(-50%, -50%)',
-            zIndex: 9999,
-            pointerEvents: 'none',
-          }}
-        >
-          <MapPopover
-            store={selectedStore}
-            showIndex={false}
-            open={popoverOpen}
-            onOpenChange={(open: boolean) => {
-              if (!open) closePopover();
-            }}
-          >
-            <div style={{ width: '1px', height: '1px', pointerEvents: 'auto' }} />
-          </MapPopover>
+      {/* 로딩 오버레이 */}
+      {loading && (
+        <div className="absolute inset-0 z-10 flex items-center justify-center bg-white/90">
+          <LoadingMooner />
         </div>
+      )}
+
+      {/* 에러 오버레이 */}
+      {error && !loading && (
+        <div className="absolute inset-0 z-10 flex items-center justify-center bg-white/90">
+          <div className="text-center">
+            <div className="text-red-500 text-sm mb-2">{error}</div>
+            <button
+              onClick={() => window.location.reload()}
+              className="text-xs text-blue-500 hover:underline"
+            >
+              다시 시도
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* API 연결 중 오버레이 */}
+      {!isApiReady && !loading && !error && (
+        <div className="absolute inset-0 z-10 flex items-center justify-center bg-white/90">
+          <div className="flex items-center gap-2 text-gray-500 text-sm">
+            <div className="w-4 h-4 border-2 border-gray-300 border-t-blue-500 rounded-full animate-spin"></div>
+            지도 API 연결 중...
+          </div>
+        </div>
+      )}
+
+      {/* 지도 컨트롤 — 지도와 API가 준비됐을 때만 표시 */}
+      {!loading && !error && isApiReady && (
+        <>
+          <MapControls
+            loadingLocation={loadingLocation}
+            onGetCurrentLocation={getCurrentLocation}
+            brandIds={allBrandIds}
+            selectedIds={selectedIds}
+            onChangeSelectedIds={onChangeSelectedIds ?? (() => {})}
+          />
+
+          <MapLegend popupCount={nearbyStores.length} hasCurrentLocation={!!currentLocation} />
+
+          {selectedStores.length > 0 && (
+            <div
+              style={{
+                position: 'fixed',
+                top: '50%',
+                left: '50%',
+                transform: 'translate(-50%, -50%)',
+                zIndex: 9999,
+                pointerEvents: 'none',
+              }}
+            >
+              <MapPopover
+                stores={selectedStores}
+                currentIndex={selectedIndex}
+                onChangeIndex={setSelectedIndex}
+                open={popoverOpen}
+                onOpenChange={(open: boolean) => {
+                  if (!open) closePopover();
+                }}
+              >
+                <div style={{ width: '1px', height: '1px', pointerEvents: 'auto' }} />
+              </MapPopover>
+            </div>
+          )}
+        </>
       )}
     </div>
   );

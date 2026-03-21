@@ -21,7 +21,7 @@ interface ChatBubbleProps {
 }
 
 const ChatBubble: React.FC<ChatBubbleProps> = React.memo(
-  ({ message, isStreaming = false, isLatestBotMessage = false }) => {
+  ({ message, isStreaming = false, isLatestBotMessage = false }: ChatBubbleProps) => {
     const isBot = message.type === 'bot';
     const navigate = useNavigate();
 
@@ -64,6 +64,44 @@ const ChatBubble: React.FC<ChatBubbleProps> = React.memo(
 
       return content;
     }, [message.content]);
+
+    // [지연 스트리밍] 텍스트가 모두 수신된 후 클라이언트 자체적으로 한 글자씩 보여주는 기능
+    const [displayedContent, setDisplayedContent] = React.useState('');
+    const [isTyping, setIsTyping] = React.useState(false);
+
+    React.useEffect(() => {
+      if (processedContent) {
+        // 봇의 최신 메시지이면서 아직 출력된 내용이 없을 때 타이핑 애니메이션 시작
+        if (isBot && isLatestBotMessage && displayedContent === '') {
+          setIsTyping(true);
+        } else if (!isTyping || !isLatestBotMessage) {
+          // 이미 지나간 메시지거나 사용자 메시지면 즉시 완성된 텍스트 표시
+          setDisplayedContent(processedContent);
+          setIsTyping(false);
+        }
+      } else {
+        setDisplayedContent('');
+      }
+    }, [processedContent, isLatestBotMessage, isBot]);
+
+    React.useEffect(() => {
+      if (!isTyping || !processedContent) return;
+
+      const intervalId = setInterval(() => {
+        setDisplayedContent((prev) => {
+          // 한 번에 출력할 글자수 (속도 조절, 2글자씩)
+          const nextLength = prev.length + 2;
+          if (nextLength >= processedContent.length) {
+            clearInterval(intervalId);
+            setIsTyping(false);
+            return processedContent;
+          }
+          return processedContent.slice(0, nextLength);
+        });
+      }, 15); // 출력 간격
+
+      return () => clearInterval(intervalId);
+    }, [isTyping, processedContent]);
 
     // 마크다운 사용 조건
     const shouldUseMarkdown = React.useMemo(() => {
@@ -118,35 +156,22 @@ const ChatBubble: React.FC<ChatBubbleProps> = React.memo(
 
     // 카드 표시 조건 검사
     const shouldShowPlanCards = React.useMemo(() => {
-      const hasCards = message.planRecommendations && message.planRecommendations.length > 0;
-      // 최신 봇 메시지이거나 추천 메시지이거나 카드 데이터가 있으면 표시
-      const shouldShow = isRecommendationMessage || isLatestBotMessage || hasCards;
-      const result = isBot && hasCards && shouldShow;
-
-      return result;
-    }, [isBot, message.planRecommendations, isRecommendationMessage, isLatestBotMessage]);
+      // 통신 중이거나 아직 타이핑 중이면 카드 숨김
+      if (isStreaming || isTyping || !message.planRecommendations || message.planRecommendations.length === 0) return false;
+      return true;
+    }, [message.planRecommendations, isStreaming, isTyping]);
 
     const shouldShowSubscriptionCard = React.useMemo(() => {
-      const hasCards =
-        message.subscriptionRecommendations &&
-        Object.keys(message.subscriptionRecommendations).length > 0;
-      // 최신 봇 메시지이거나 추천 메시지이거나 카드 데이터가 있으면 표시
-      const shouldShow = isRecommendationMessage || isLatestBotMessage || hasCards;
-      const result = isBot && hasCards && shouldShow;
-      return result;
-    }, [
-      isBot,
-      message.subscriptionRecommendations,
-      isRecommendationMessage,
-      isLatestBotMessage,
-      message.id,
-    ]);
+      // 통신 중이거나 아직 타이핑 중이면 숨김
+      if (isStreaming || isTyping || !message.subscriptionRecommendations || Object.keys(message.subscriptionRecommendations).length === 0) return false;
+      return true;
+    }, [message.subscriptionRecommendations, isStreaming, isTyping]);
 
     const shouldShowUsageAnalysisCard = React.useMemo(() => {
-      const hasUsageAnalysis = !!message.usageAnalysis;
-      const shouldShow = isRecommendationMessage || isLatestBotMessage || hasUsageAnalysis;
-      return isBot && hasUsageAnalysis && shouldShow;
-    }, [isBot, message.usageAnalysis, isRecommendationMessage, isLatestBotMessage]);
+      // 통신 중이거나 아직 타이핑 중이면 숨김
+      if (isStreaming || isTyping || !message.usageAnalysis) return false;
+      return true;
+    }, [message.usageAnalysis, isStreaming, isTyping]);
 
     // 타임스탬프 포맷팅 최적화
     const formatTimestamp = React.useMemo(() => {
@@ -255,7 +280,8 @@ const ChatBubble: React.FC<ChatBubbleProps> = React.memo(
     );
 
     // 렌더링할 내용이 없으면 null 반환
-    if (!processedContent && !shouldShowPlanCards && !shouldShowSubscriptionCard) {
+    // 단, 현재 스트리밍 중인 관송 중 최신 봇 메시지는 유지 (아바타 가리지 않으므로)
+    if (!processedContent && !shouldShowPlanCards && !shouldShowSubscriptionCard && !isStreaming) {
       return null;
     }
 
@@ -283,25 +309,27 @@ const ChatBubble: React.FC<ChatBubbleProps> = React.memo(
               )}
             >
               <div className="text-sm">
-                {isBot && shouldUseMarkdown ? (
+                {isBot && shouldUseMarkdown && !isTyping ? (
+                  // 타이핑 완료 후에만 ReactMarkdown 적용
+                  // 타이핑 중에는 15ms 간격으로 재파싱이 발생하므로 일반 텍스트로 표시
                   <ReactMarkdown
                     components={markdownComponents}
                     remarkPlugins={[remarkBreaks]}
                     skipHtml={true}
                   >
-                    {processedContent}
+                    {displayedContent}
                   </ReactMarkdown>
                 ) : (
                   <div
                     className="whitespace-pre-wrap leading-relaxed"
                     style={{ wordBreak: 'keep-all', overflowWrap: 'break-word' }}
                   >
-                    {processedContent}
+                    {displayedContent}
                   </div>
                 )}
 
-                {/* 스트리밍 커서 */}
-                {isStreaming && isBot && (
+                {/* 지연 스트리밍 커서 */}
+                {isTyping && isBot && (
                   <span className="inline-block w-2 h-4 bg-current opacity-50 animate-pulse ml-1">
                     |
                   </span>
@@ -343,7 +371,8 @@ const ChatBubble: React.FC<ChatBubbleProps> = React.memo(
           {isBot &&
             (message.content.includes('서버에 연결할 수 없습니다') ||
               message.content.includes('요청 처리 중 오류가 발생했습니다') ||
-              message.content.includes('시스템 오류가 발생했습니다')) && (
+              message.content.includes('시스템 오류가 발생했습니다') ||
+              message.content.includes('문제가 발생했습니다. 다시시도해주세요')) && (
               <div className="mt-3">
                 <button
                   onClick={() => window.location.reload()}
@@ -357,16 +386,12 @@ const ChatBubble: React.FC<ChatBubbleProps> = React.memo(
       </div>
     );
   },
-  (prevProps, nextProps) => {
-    // 기본 비교
+  (prevProps: ChatBubbleProps, nextProps: ChatBubbleProps) => {
+    // 커스텀 memo 비교 함수
     if (prevProps.message.id !== nextProps.message.id) return false;
     if (prevProps.isStreaming !== nextProps.isStreaming) return false;
     if (prevProps.isLatestBotMessage !== nextProps.isLatestBotMessage) return false;
-
-    // 메시지 내용 변경 확인
     if (prevProps.message.content !== nextProps.message.content) return false;
-
-    // 카드 정보 변경 확인
     if (prevProps.message.planRecommendations !== nextProps.message.planRecommendations)
       return false;
     if (
@@ -374,8 +399,9 @@ const ChatBubble: React.FC<ChatBubbleProps> = React.memo(
       nextProps.message.subscriptionRecommendations
     )
       return false;
-
-    return true; // 모든 비교를 통과하면 리렌더링하지 않음
+    // usageAnalysis 비교 누락 보완
+    if (prevProps.message.usageAnalysis !== nextProps.message.usageAnalysis) return false;
+    return true;
   },
 );
 

@@ -327,17 +327,21 @@ export const ChatContainer: React.FC = () => {
   );
 
   // 스트리밍 상태
+  // mutation.isPending이 false가 되어도 streamingState가 아직 활성 중이면 스트리밍 유지
+  // → HTTP 완료 후 버퍼 → store 반영 사이의 빈 화면 갭을 제거
   const isStreaming = useMemo(
     () =>
       chatMutation.isPending ||
       ubtiMutation.isPending ||
       likesRecommendationMutation.isPending ||
-      usageRecommendationMutation.isPending,
+      usageRecommendationMutation.isPending ||
+      (streamingState !== 'idle' && streamingState !== 'completed'),
     [
       chatMutation.isPending,
       ubtiMutation.isPending,
       likesRecommendationMutation.isPending,
       usageRecommendationMutation.isPending,
+      streamingState,
     ],
   );
 
