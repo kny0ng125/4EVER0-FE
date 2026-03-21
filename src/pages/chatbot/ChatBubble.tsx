@@ -115,8 +115,6 @@ const ChatBubble: React.FC<ChatBubbleProps> = React.memo(
       return hasMarkdownElements || !isStreaming;
     }, [isBot, isStreaming, processedContent]);
 
-
-
     // 카드 표시 조건 검사
     const shouldShowPlanCards = React.useMemo(() => {
       // 통신 중이거나 아직 타이핑 중이면 카드 숨김

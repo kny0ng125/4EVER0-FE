@@ -11,10 +11,7 @@ interface MarkerClusteringOptions {
     anchor: naver.maps.Point;
   }>;
   indexGenerator?: number[];
-  stylingFunction?: (
-    clusterMarker: naver.maps.Marker,
-    count: number,
-  ) => void;
+  stylingFunction?: (clusterMarker: naver.maps.Marker, count: number) => void;
 }
 
 export interface MarkerClusteringInstance {
@@ -104,10 +101,7 @@ export const createMarkerClustering = (
     gridSize: 30, // 기존 120에서 30(px)으로 줄여 마커가 반 이상 겹칠 때만 클러스터링되도록 조정
     icons: icons,
     indexGenerator: [10, 50, 100],
-    stylingFunction: function (
-      clusterMarker: naver.maps.Marker,
-      count: number,
-    ) {
+    stylingFunction: function (clusterMarker: naver.maps.Marker, count: number) {
       const element = clusterMarker.getElement();
       if (element) {
         const div = element.querySelector('div');
@@ -125,7 +119,9 @@ export const createMarkerClustering = (
             _clusterMarker: naver.maps.Marker;
             _clusterMember: naver.maps.Marker[];
           }
-          const markerClusterer = clusterer as MarkerClusteringInstance & { _clusters?: ClusterData[] };
+          const markerClusterer = clusterer as MarkerClusteringInstance & {
+            _clusters?: ClusterData[];
+          };
           const clusters = markerClusterer._clusters;
           if (clusters) {
             const cluster = clusters.find((c) => c._clusterMarker === clusterMarker);
