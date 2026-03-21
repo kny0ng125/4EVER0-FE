@@ -115,44 +115,7 @@ const ChatBubble: React.FC<ChatBubbleProps> = React.memo(
       return hasMarkdownElements || !isStreaming;
     }, [isBot, isStreaming, processedContent]);
 
-    // 추천 완료 메시지인지 확인 (키워드로 검사)
-    const isRecommendationMessage = React.useMemo(() => {
-      if (!processedContent) return false;
 
-      const recommendationKeywords = [
-        '추천드립니다',
-        '추천해드릴게',
-        '추천!',
-        '완전 추천',
-        '찰떡 요금제',
-        '럭키비키',
-        '느좋',
-        '지리고',
-        '추천 요금제',
-        '추천 구독',
-        '조합 추천',
-        '메인 구독',
-        '라이프 브랜드',
-        '조합',
-        '위 조합을 추천',
-        '이 조합 완전',
-        '구독 서비스 추천',
-        '이 조합',
-        '조합이',
-        '추천',
-        '완전',
-        '알잘딱깔센',
-        '찰떡',
-        '유독픽',
-        '매칭',
-        '딱 맞는',
-        '어울리',
-      ];
-
-      const result = recommendationKeywords.some((keyword) => processedContent.includes(keyword));
-
-      return result;
-    }, [processedContent]);
 
     // 카드 표시 조건 검사
     const shouldShowPlanCards = React.useMemo(() => {

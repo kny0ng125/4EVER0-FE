@@ -12,7 +12,7 @@ interface MarkerClusteringOptions {
   }>;
   indexGenerator?: number[];
   stylingFunction?: (
-    clusterMarker: { getElement: () => HTMLElement | null },
+    clusterMarker: naver.maps.Marker,
     count: number,
   ) => void;
 }
@@ -105,7 +105,7 @@ export const createMarkerClustering = (
     icons: icons,
     indexGenerator: [10, 50, 100],
     stylingFunction: function (
-      clusterMarker: any, // naver.maps.Marker
+      clusterMarker: naver.maps.Marker,
       count: number,
     ) {
       const element = clusterMarker.getElement();
@@ -119,11 +119,16 @@ export const createMarkerClustering = (
       // 클릭 이벤트 오버라이드
       if (onClusterClick) {
         naver.maps.Event.clearListeners(clusterMarker, 'click');
-        naver.maps.Event.addListener(clusterMarker, 'click', (e: any) => {
-          e.domEvent?.stopPropagation();
-          const clusters = (clusterer as any)._clusters;
+        naver.maps.Event.addListener(clusterMarker, 'click', (e: naver.maps.PointerEvent) => {
+          e.pointerEvent?.stopPropagation();
+          interface ClusterData {
+            _clusterMarker: naver.maps.Marker;
+            _clusterMember: naver.maps.Marker[];
+          }
+          const markerClusterer = clusterer as MarkerClusteringInstance & { _clusters?: ClusterData[] };
+          const clusters = markerClusterer._clusters;
           if (clusters) {
-            const cluster = clusters.find((c: any) => c._clusterMarker === clusterMarker);
+            const cluster = clusters.find((c) => c._clusterMarker === clusterMarker);
             if (cluster && cluster._clusterMember) {
               onClusterClick(cluster._clusterMember);
             }

@@ -339,7 +339,7 @@ export default function StoreMap({
         });
         if (marker) {
           // 마커 객체에 원본 store 데이터를 심어둡니다 (클러스터에서 역추적용)
-          (marker as any)._storeData = store;
+          (marker as naver.maps.Marker & { _storeData?: StoreData })._storeData = store;
           markersRef.current.push(marker);
         }
 
@@ -357,8 +357,8 @@ export default function StoreMap({
           (clickedMembers) => {
             // 클릭된 클러스터 내의 마커들에 심어둔 _storeData 추출
             const storesInCluster = clickedMembers
-              .map((m: any) => m._storeData as StoreData)
-              .filter(Boolean);
+              .map((m) => (m as naver.maps.Marker & { _storeData?: StoreData })._storeData)
+              .filter((s): s is StoreData => Boolean(s));
             if (storesInCluster.length > 0) {
               openClusterPopover(storesInCluster);
             }

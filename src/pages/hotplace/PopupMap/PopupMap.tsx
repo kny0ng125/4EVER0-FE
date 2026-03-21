@@ -350,7 +350,7 @@ export default function PopupMap({
           }
 
           // 마커에 원본 데이터 저장
-          (marker as any)._popupData = popup;
+          (marker as naver.maps.Marker & { _popupData?: PopupData })._popupData = popup;
           markersRef.current.push(marker);
           successCount++;
 
@@ -379,8 +379,8 @@ export default function PopupMap({
             markersRef.current,
             (clickedMembers) => {
               const popupsInCluster = clickedMembers
-                .map((m: any) => m._popupData as PopupData)
-                .filter(Boolean);
+                .map((m) => (m as naver.maps.Marker & { _popupData?: PopupData })._popupData)
+                .filter((p): p is PopupData => Boolean(p));
               if (popupsInCluster.length > 0) {
                 openClusterPopover(popupsInCluster);
               }
