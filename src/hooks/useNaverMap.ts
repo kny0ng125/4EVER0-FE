@@ -8,11 +8,7 @@ const NAVER_MAPS_SCRIPT_URL = `https://oapi.map.naver.com/openapi/v3/maps.js?ncp
 function loadNaverMapsScript(): Promise<void> {
   return new Promise((resolve, reject) => {
     // 이미 완전히 로드된 경우
-    if (
-      typeof window !== 'undefined' &&
-      window.naver?.maps?.Map &&
-      window.naver?.maps?.Marker
-    ) {
+    if (typeof window !== 'undefined' && window.naver?.maps?.Map && window.naver?.maps?.Marker) {
       resolve();
       return;
     }
@@ -21,9 +17,7 @@ function loadNaverMapsScript(): Promise<void> {
     const existing = document.querySelector('[data-naver-maps]');
     if (existing) {
       existing.addEventListener('load', () => resolve());
-      existing.addEventListener('error', () =>
-        reject(new Error('Naver Maps 스크립트 로드 실패'))
-      );
+      existing.addEventListener('error', () => reject(new Error('Naver Maps 스크립트 로드 실패')));
       return;
     }
 
@@ -149,7 +143,11 @@ export function useNaverMap(options: NaverMapOptions = {}) {
       initializationAttemptedRef.current = true;
 
       if (mapInstanceRef.current) {
-        try { mapInstanceRef.current.destroy?.(); } catch { /* ignore */ }
+        try {
+          mapInstanceRef.current.destroy?.();
+        } catch {
+          /* ignore */
+        }
       }
 
       mapInstanceRef.current = new naver.maps.Map(mapRef.current, {
@@ -235,7 +233,9 @@ export function useNaverMap(options: NaverMapOptions = {}) {
         try {
           mapInstanceRef.current.destroy?.();
           mapInstanceRef.current = undefined;
-        } catch { /* ignore */ }
+        } catch {
+          /* ignore */
+        }
       }
 
       initializationAttemptedRef.current = false;
@@ -243,7 +243,7 @@ export function useNaverMap(options: NaverMapOptions = {}) {
       setIsLoaded(false);
       setIsApiReady(false);
     };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []); // 마운트 시 한 번만 실행
 
   return {

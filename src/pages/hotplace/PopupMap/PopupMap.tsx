@@ -200,7 +200,6 @@ export default function PopupMap({
     };
   }, [isLoaded, isApiReady, mapInstance, fetchPopupsAtMapCenter]);
 
-
   // 마커 정리 함수
   const safeCleanupMarkers = useCallback(() => {
     markersRef.current.forEach((marker, index) => {
@@ -385,7 +384,7 @@ export default function PopupMap({
               if (popupsInCluster.length > 0) {
                 openClusterPopover(popupsInCluster);
               }
-            }
+            },
           );
           console.log('✅ 클러스터링 적용 완료');
         } catch (e) {

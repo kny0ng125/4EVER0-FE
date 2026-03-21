@@ -61,7 +61,10 @@ export const useChatStore = create<ChatStore>()((set, get) => ({
       // findIndex로 마지막 봇 메시지 인덱스 탐색 (전체 spread copy 최소화)
       let lastBotIdx = -1;
       for (let i = session.messages.length - 1; i >= 0; i--) {
-        if (session.messages[i].type === 'bot') { lastBotIdx = i; break; }
+        if (session.messages[i].type === 'bot') {
+          lastBotIdx = i;
+          break;
+        }
       }
       if (lastBotIdx === -1) return state;
 
@@ -101,7 +104,10 @@ export const useChatStore = create<ChatStore>()((set, get) => ({
       // findIndex로 마지막 봇 메시지 인덱스 탐색
       let lastBotIdx = -1;
       for (let i = session.messages.length - 1; i >= 0; i--) {
-        if (session.messages[i].type === 'bot') { lastBotIdx = i; break; }
+        if (session.messages[i].type === 'bot') {
+          lastBotIdx = i;
+          break;
+        }
       }
       if (lastBotIdx === -1) return state;
 

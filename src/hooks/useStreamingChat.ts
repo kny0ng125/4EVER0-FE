@@ -356,7 +356,7 @@ export const useStreamingChat = () => {
 
               case 'message_end': {
                 setStreamingState('completed');
-                
+
                 // 스트리밍이 정상적으로 끝나면 비로소 완성된 전체 응답 세트를 UI에 한 번만 반영
                 updateMessageWithAllData(fullResponseRef.current, undefined, undefined);
 
@@ -434,15 +434,17 @@ export const useStreamingChat = () => {
           // 중간 오류 없이 완전히 마무리되었을 때만 버퍼에 쌓인 텍스트와 카드 데이터를 UI에 적용
           updateMessageWithAllData(fullResponseRef.current, undefined, undefined);
           setStreamingState('completed');
-          
+
           const hasCards =
-            cardDataRef.current.plans.length > 0 ||
-            cardDataRef.current.subscriptions !== null;
-            
-          setTimeout(() => {
-            setStreamingState('idle');
-            setExpectingCards(false);
-          }, hasCards ? 10000 : 1000);
+            cardDataRef.current.plans.length > 0 || cardDataRef.current.subscriptions !== null;
+
+          setTimeout(
+            () => {
+              setStreamingState('idle');
+              setExpectingCards(false);
+            },
+            hasCards ? 10000 : 1000,
+          );
         },
 
         onError: (error: Error) => {

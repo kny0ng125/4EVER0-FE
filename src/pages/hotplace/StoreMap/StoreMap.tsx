@@ -362,7 +362,7 @@ export default function StoreMap({
             if (storesInCluster.length > 0) {
               openClusterPopover(storesInCluster);
             }
-          }
+          },
         );
       }
 

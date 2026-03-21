@@ -1,136 +1,180 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="ko">
-<head>
-  <meta charset="UTF-8">
-  <title>Chatbot Streaming Performance Benchmark</title>
-  <style>
-    body { font-family: sans-serif; padding: 20px; background: #f0f4f8; }
-    .card { background: white; padding: 20px; border-radius: 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); margin-bottom: 20px; }
-    .chat-bubble { padding: 10px; margin: 5px 0; border-radius: 8px; background: #e0e7ff; }
-    .stats { font-size: 1.2em; font-weight: bold; color: #ec4899; }
-    #visual-container { display: flex; gap: 20px; }
-    .phone-mockup { border: 12px solid #333; border-radius: 24px; width: 300px; height: 500px; overflow-y: auto; padding: 10px; background: white; }
-  </style>
-</head>
-<body>
-  <h2>💬 챗봇 렌더링 방식 성능 벤치마크 (React 리렌더링 시뮬레이션)</h2>
-  
-  <div class="card">
-    <h3>시나리오 📝</h3>
-    <p>인사 ➡️ 요금제 추천 요청 ➡️ 요구사항 답변 ➡️ 추천 ➡️ 감사인사 (총 누적 대화 길이: 약 500자)</p>
-    <p>서버에서 10ms 단위로 1글자씩 스트리밍 응답이 올 때 브라우저 메인 스레드 연산(페인팅) 비용을 측정합니다.</p>
-    <button onclick="runBenchmark()" style="padding: 10px 20px; font-size: 16px; cursor: pointer;">🚀 벤치마크 런칭</button>
-  </div>
+  <head>
+    <meta charset="UTF-8" />
+    <title>Chatbot Streaming Performance Benchmark</title>
+    <style>
+      body {
+        font-family: sans-serif;
+        padding: 20px;
+        background: #f0f4f8;
+      }
+      .card {
+        background: white;
+        padding: 20px;
+        border-radius: 12px;
+        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        margin-bottom: 20px;
+      }
+      .chat-bubble {
+        padding: 10px;
+        margin: 5px 0;
+        border-radius: 8px;
+        background: #e0e7ff;
+      }
+      .stats {
+        font-size: 1.2em;
+        font-weight: bold;
+        color: #ec4899;
+      }
+      #visual-container {
+        display: flex;
+        gap: 20px;
+      }
+      .phone-mockup {
+        border: 12px solid #333;
+        border-radius: 24px;
+        width: 300px;
+        height: 500px;
+        overflow-y: auto;
+        padding: 10px;
+        background: white;
+      }
+    </style>
+  </head>
+  <body>
+    <h2>💬 챗봇 렌더링 방식 성능 벤치마크 (React 리렌더링 시뮬레이션)</h2>
 
-  <div class="card" id="results" style="display: none;">
-    <h3 style="color:#ef4444">🔴 개선 전 (매 글자마다 UI 리렌더링 - 예전 코드)</h3>
-    <p>DOM 업데이트 횟수: <span id="old-updates">0</span>회</p>
-    <p>총 브라우저 연산 지연시간: <span id="old-time" class="stats">0 ms</span></p>
-
-    <h3 style="color:#10b981; margin-top:20px;">🟢 개선 후 (백그라운드 메모리 버퍼링 - 신규 튜닝)</h3>
-    <p>DOM 업데이트 횟수: <span id="new-updates">0</span>회</p>
-    <p>총 브라우저 연산 지연시간: <span id="new-time" class="stats">0 ms</span></p>
-    
-    <h2 id="final-result" style="color:#6366f1; margin-top:30px;"></h2>
-  </div>
-
-  <div id="visual-container">
-    <div class="phone-mockup" id="phone-old" style="opacity: 0.5;">
-      <h4 style="text-align:center; margin:0 0 10px 0;">개선 전 화면</h4>
-      <div id="chat-old"></div>
+    <div class="card">
+      <h3>시나리오 📝</h3>
+      <p>
+        인사 ➡️ 요금제 추천 요청 ➡️ 요구사항 답변 ➡️ 추천 ➡️ 감사인사 (총 누적 대화 길이: 약 500자)
+      </p>
+      <p>
+        서버에서 10ms 단위로 1글자씩 스트리밍 응답이 올 때 브라우저 메인 스레드 연산(페인팅) 비용을
+        측정합니다.
+      </p>
+      <button onclick="runBenchmark()" style="padding: 10px 20px; font-size: 16px; cursor: pointer">
+        🚀 벤치마크 런칭
+      </button>
     </div>
-    <div class="phone-mockup" id="phone-new" style="opacity: 0.5;">
-      <h4 style="text-align:center; margin:0 0 10px 0;">개선 후 화면</h4>
-      <div id="chat-new"></div>
+
+    <div class="card" id="results" style="display: none">
+      <h3 style="color: #ef4444">🔴 개선 전 (매 글자마다 UI 리렌더링 - 예전 코드)</h3>
+      <p>DOM 업데이트 횟수: <span id="old-updates">0</span>회</p>
+      <p>총 브라우저 연산 지연시간: <span id="old-time" class="stats">0 ms</span></p>
+
+      <h3 style="color: #10b981; margin-top: 20px">
+        🟢 개선 후 (백그라운드 메모리 버퍼링 - 신규 튜닝)
+      </h3>
+      <p>DOM 업데이트 횟수: <span id="new-updates">0</span>회</p>
+      <p>총 브라우저 연산 지연시간: <span id="new-time" class="stats">0 ms</span></p>
+
+      <h2 id="final-result" style="color: #6366f1; margin-top: 30px"></h2>
     </div>
-  </div>
 
-  <script>
-    const sampleText = "안녕하세요! LG유플러스 무너봇입니다.\n\n어떤 요금제를 원하시나요?\n데이터를 무제한으로 원하시고 유튜브 프리미엄을 보신다면, '5G 다이렉트 65' 요금제를 가장 강력하게 추천해드립니다!\n\n위 요금제는 매월 65,000원에 유튜브 프리미엄 혜택과 데이터 무제한을 동시에 누릴 수 있는 최고의 럭키비키 찰떡 조합입니다. 더 궁굼한 점이 있으시면 편하게 말씀해주세요! 언제나 환영입니다. 감사합니다!";
-    
-    // 리액트의 거대한 DOM 트리를 시뮬레이션하기 위한 함수 (가상의 챗봇 히스토리 생성)
-    function generateHistoryDOM() {
-      let html = '';
-      for(let i=0; i<30; i++) {
-        html += `<div class="chat-bubble">과거 대화 내역 ${i}... (렌더링 비용 테스트용)</div>`;
-      }
-      return html;
-    }
+    <div id="visual-container">
+      <div class="phone-mockup" id="phone-old" style="opacity: 0.5">
+        <h4 style="text-align: center; margin: 0 0 10px 0">개선 전 화면</h4>
+        <div id="chat-old"></div>
+      </div>
+      <div class="phone-mockup" id="phone-new" style="opacity: 0.5">
+        <h4 style="text-align: center; margin: 0 0 10px 0">개선 후 화면</h4>
+        <div id="chat-new"></div>
+      </div>
+    </div>
 
-    async function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+    <script>
+      const sampleText =
+        "안녕하세요! LG유플러스 무너봇입니다.\n\n어떤 요금제를 원하시나요?\n데이터를 무제한으로 원하시고 유튜브 프리미엄을 보신다면, '5G 다이렉트 65' 요금제를 가장 강력하게 추천해드립니다!\n\n위 요금제는 매월 65,000원에 유튜브 프리미엄 혜택과 데이터 무제한을 동시에 누릴 수 있는 최고의 럭키비키 찰떡 조합입니다. 더 궁굼한 점이 있으시면 편하게 말씀해주세요! 언제나 환영입니다. 감사합니다!";
 
-    async function runBenchmark() {
-      document.getElementById('results').style.display = 'block';
-      const oldBox = document.getElementById('chat-old');
-      const newBox = document.getElementById('chat-new');
-      
-      oldBox.innerHTML = generateHistoryDOM() + `<div class="chat-bubble" id="target-old"></div>`;
-      newBox.innerHTML = generateHistoryDOM() + `<div class="chat-bubble" id="target-new">로딩 중...</div>`;
-
-      document.getElementById('phone-old').style.opacity = '1';
-      document.getElementById('phone-new').style.opacity = '1';
-
-      const chunks = sampleText.split('');
-      
-      // ---- 1. 개선 전 시뮬레이션 (매 청크마다 Heavy DOM 업데이트) ----
-      let oldTotalTime = 0;
-      let oldUpdates = 0;
-      let tempHtml = '';
-
-      for(let char of chunks) {
-        tempHtml += char;
-        const t0 = performance.now();
-        
-        // **핵심 병목**: 매 글자마다 기존 30개 말풍선을 포함해 최하단 말풍선을 다시 덮어씌움 (리액트 리렌더링 오버헤드 시뮬레이션)
-        // 실제로는 React 렌더링 트리 탐색 비용이 추가되어 이것보다 더 느림
-        let dummyOp = '';
-        for(let j=0; j<5000; j++) dummyOp += 'a'; // 추가 JS 스크립트 실행 시간 모방
-        
-        document.getElementById('target-old').innerText = tempHtml; 
-        
-        const t1 = performance.now();
-        oldTotalTime += (t1 - t0);
-        oldUpdates++;
-        
-        document.getElementById('old-updates').innerText = oldUpdates;
-        document.getElementById('old-time').innerText = oldTotalTime.toFixed(2) + ' ms';
-        
-        await sleep(2); // 네트워크 청크 지연 모방
+      // 리액트의 거대한 DOM 트리를 시뮬레이션하기 위한 함수 (가상의 챗봇 히스토리 생성)
+      function generateHistoryDOM() {
+        let html = '';
+        for (let i = 0; i < 30; i++) {
+          html += `<div class="chat-bubble">과거 대화 내역 ${i}... (렌더링 비용 테스트용)</div>`;
+        }
+        return html;
       }
 
-      // ---- 2. 개선 후 시뮬레이션 (안보이는 메모리에만 누적 후 한 번에 업데이트) ----
-      let newTotalTime = 0;
-      let newUpdates = 0;
-      let memoryBuffer = '';
-
-      for(let char of chunks) {
-        memoryBuffer += char;
-        const t0 = performance.now();
-        
-        // 화면 안 그림. 메모리 변수만 조작
-        const temp = memoryBuffer + "1"; 
-        
-        const t1 = performance.now();
-        newTotalTime += (t1 - t0);
-        
-        await sleep(2); 
+      async function sleep(ms) {
+        return new Promise((r) => setTimeout(r, ms));
       }
-      
-      // 끝나면 딱 1번의 렌더링 세트
-      const tEnd0 = performance.now();
-      document.getElementById('target-new').innerText = memoryBuffer;
-      newUpdates++;
-      const tEnd1 = performance.now();
-      newTotalTime += (tEnd1 - tEnd0);
-      
-      document.getElementById('new-updates').innerText = newUpdates;
-      document.getElementById('new-time').innerText = newTotalTime.toFixed(2) + ' ms';
 
-      const ratio = ((oldTotalTime - newTotalTime) / oldTotalTime * 100).toFixed(1);
-      
-      document.getElementById('final-result').innerText = `🔥 최종 결과: 동일한 길이의 답변 도출 시 브라우저 연산 및 렌더링(화면 멈춤 현상) 비용이 ${ratio}% 절약되었습니다! (벤치마크 봇 완료 대기)`;
-      document.getElementById('final-result').className = 'benchmark-done';
-    }
-  </script>
-</body>
+      async function runBenchmark() {
+        document.getElementById('results').style.display = 'block';
+        const oldBox = document.getElementById('chat-old');
+        const newBox = document.getElementById('chat-new');
+
+        oldBox.innerHTML = generateHistoryDOM() + `<div class="chat-bubble" id="target-old"></div>`;
+        newBox.innerHTML =
+          generateHistoryDOM() + `<div class="chat-bubble" id="target-new">로딩 중...</div>`;
+
+        document.getElementById('phone-old').style.opacity = '1';
+        document.getElementById('phone-new').style.opacity = '1';
+
+        const chunks = sampleText.split('');
+
+        // ---- 1. 개선 전 시뮬레이션 (매 청크마다 Heavy DOM 업데이트) ----
+        let oldTotalTime = 0;
+        let oldUpdates = 0;
+        let tempHtml = '';
+
+        for (let char of chunks) {
+          tempHtml += char;
+          const t0 = performance.now();
+
+          // **핵심 병목**: 매 글자마다 기존 30개 말풍선을 포함해 최하단 말풍선을 다시 덮어씌움 (리액트 리렌더링 오버헤드 시뮬레이션)
+          // 실제로는 React 렌더링 트리 탐색 비용이 추가되어 이것보다 더 느림
+          let dummyOp = '';
+          for (let j = 0; j < 5000; j++) dummyOp += 'a'; // 추가 JS 스크립트 실행 시간 모방
+
+          document.getElementById('target-old').innerText = tempHtml;
+
+          const t1 = performance.now();
+          oldTotalTime += t1 - t0;
+          oldUpdates++;
+
+          document.getElementById('old-updates').innerText = oldUpdates;
+          document.getElementById('old-time').innerText = oldTotalTime.toFixed(2) + ' ms';
+
+          await sleep(2); // 네트워크 청크 지연 모방
+        }
+
+        // ---- 2. 개선 후 시뮬레이션 (안보이는 메모리에만 누적 후 한 번에 업데이트) ----
+        let newTotalTime = 0;
+        let newUpdates = 0;
+        let memoryBuffer = '';
+
+        for (let char of chunks) {
+          memoryBuffer += char;
+          const t0 = performance.now();
+
+          // 화면 안 그림. 메모리 변수만 조작
+          const temp = memoryBuffer + '1';
+
+          const t1 = performance.now();
+          newTotalTime += t1 - t0;
+
+          await sleep(2);
+        }
+
+        // 끝나면 딱 1번의 렌더링 세트
+        const tEnd0 = performance.now();
+        document.getElementById('target-new').innerText = memoryBuffer;
+        newUpdates++;
+        const tEnd1 = performance.now();
+        newTotalTime += tEnd1 - tEnd0;
+
+        document.getElementById('new-updates').innerText = newUpdates;
+        document.getElementById('new-time').innerText = newTotalTime.toFixed(2) + ' ms';
+
+        const ratio = (((oldTotalTime - newTotalTime) / oldTotalTime) * 100).toFixed(1);
+
+        document.getElementById('final-result').innerText =
+          `🔥 최종 결과: 동일한 길이의 답변 도출 시 브라우저 연산 및 렌더링(화면 멈춤 현상) 비용이 ${ratio}% 절약되었습니다! (벤치마크 봇 완료 대기)`;
+        document.getElementById('final-result').className = 'benchmark-done';
+      }
+    </script>
+  </body>
 </html>

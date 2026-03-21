@@ -81,3 +81,15 @@ $RECYCLE.BIN/
 dist/
 
 stats.html
+
+# Custom ignores
+lighthouse-report.json
+coverage/
+.eslintcache
+.vite/
+storybook-static/
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+.vscode/

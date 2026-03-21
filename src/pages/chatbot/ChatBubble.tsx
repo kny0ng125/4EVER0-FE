@@ -157,13 +157,25 @@ const ChatBubble: React.FC<ChatBubbleProps> = React.memo(
     // 카드 표시 조건 검사
     const shouldShowPlanCards = React.useMemo(() => {
       // 통신 중이거나 아직 타이핑 중이면 카드 숨김
-      if (isStreaming || isTyping || !message.planRecommendations || message.planRecommendations.length === 0) return false;
+      if (
+        isStreaming ||
+        isTyping ||
+        !message.planRecommendations ||
+        message.planRecommendations.length === 0
+      )
+        return false;
       return true;
     }, [message.planRecommendations, isStreaming, isTyping]);
 
     const shouldShowSubscriptionCard = React.useMemo(() => {
       // 통신 중이거나 아직 타이핑 중이면 숨김
-      if (isStreaming || isTyping || !message.subscriptionRecommendations || Object.keys(message.subscriptionRecommendations).length === 0) return false;
+      if (
+        isStreaming ||
+        isTyping ||
+        !message.subscriptionRecommendations ||
+        Object.keys(message.subscriptionRecommendations).length === 0
+      )
+        return false;
       return true;
     }, [message.subscriptionRecommendations, isStreaming, isTyping]);
 
